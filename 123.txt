@@ -1,0 +1,8 @@
+#include "mbed.h"
+#include "HCSR04.h"
+#include "DS1302.h"
+
+BufferedSerial hc(D14,D15,9600);            //tx, rx (hc-12 side) UART3
+BufferedSerial pc(USBTX, USBRX, 9600);          // tx, rx (pc side)
+DS1302 clk(PC_10, PC_11, PC_12);                //SCK, MISO, MOSI SPI3
+AnalogIn control(A1);                           //通信功能的刺激信号，目前不知道为啥

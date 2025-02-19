@@ -1,0 +1,31 @@
+void send_data(){
+    int t = 0;
+    while (t < 5000){
+        t++;
+        num2=G4OPEN.write(buf2,sizeof(buf2));
+    }
+}
+
+void getdata_pack()
+{
+    memset(buf0,'\0',sizeof(buf0));
+    num1=G4OPEN.read(buf0,2);
+    arrow_type_char = '1';
+    // arrow_type = int(arrow_type_char);
+}
+
+int main(){
+send_data();
+    printf("a\n");
+
+    printf("%c\n", arrow_type_char);
+    while(arrow_type_char=='0'){
+        printf("4\n");
+        getdata_pack();//接收返回信号
+        // arrow_type = int(arrow_type_char);
+        // num1=arrow_type;
+        //thread_sleep_for(500);
+    }
+    printf("ok for data\n");
+
+}

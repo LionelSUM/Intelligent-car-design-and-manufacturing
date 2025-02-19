@@ -1,0 +1,279 @@
+#include "mbed.h"
+#include "HCSR04.h"
+#include "DS1302.h"
+#include <BufferedSerial.h>
+#include "platform/mbed_thread.h"
+ 
+BufferedSerial F411_OM(D1,D0,115200);           //tx, rx (OpenMV)
+BufferedSerial hc(D14,D15,9600);                //tx, rx (hc-12 side)
+DS1302 clk(D13, D12, D11);                      //SCK, MISO, MOSI
+AnalogIn control(D8);                           //通信功能的刺激信号，目前不知道为啥
+DigitalOut DCout1(D0);                          //从车尾往车头看，DC1,DC2右轮；DC3,DC4左轮；
+DigitalOut DCout2(D1);
+DigitalOut DCout3(D2);
+DigitalOut DCout4(D3);
+PwmOut SpeedControl1(D6);
+PwmOut SpeedControl2(D7);
+PwmOut myservo(D5);                             //舵机
+//超声波模块
+HCSR04 sensor1(A5, A4); //front supersonic sensor, trig, echo
+HCSR04 sensor2(A3, A2); //left supersonic sensor1
+HCSR04 sensor3(A1, A0); //left supersonic sensor2
+
+char buf1[8]={0};                               //储存从OpenMV收到的信息
+char buf2[2]={2,2};                             //储存发送给OpenMV的信号   
+char arrow_type_char='0';                       //储存判断后的类型（1，2，3）
+int arrow_type=0;
+int num1;                
+int num2;
+float offset = 0.0;                             //舵机步长
+int second, minute, hour, week, day, month, year;
+
+void init(){
+    myservo.period_ms(20);
+    //SpeedControl1.period_us(100);
+    //SpeedControl2.period_us(100);
+    SpeedControl1.write(0.0);
+    SpeedControl2.write(0.0);
+    myservo.pulsewidth(0.0005);
+    DCout1 = 0;
+    DCout2 = 0;
+    DCout3 = 0;
+    DCout4 = 0;
+}
+//设置占空比为1s履带转动30cm
+void forward()
+{
+    DCout1=1;
+    DCout2=0;
+    DCout3=1;
+    DCout4=0;
+    SpeedControl1=0.30;
+    SpeedControl2=0.23;
+}
+
+void backward()
+{
+    DCout1=0;
+    DCout2=1;
+    DCout3=0;
+    DCout4=1;
+    SpeedControl1=0.30;
+    SpeedControl2=0.23;
+}
+
+void stop()
+{
+    DCout1=0;
+    DCout2=0;
+    DCout3=0;
+    DCout4=0;
+    SpeedControl1=0;
+    SpeedControl2=0;
+}
+
+void left(){
+    DCout1=0;
+    DCout2=0;
+    DCout3=0;
+    DCout4=0;
+    SpeedControl1=0;
+    SpeedControl2=0;
+    //mpu6050,背书暂定
+    //转弯后再次占空比为零，且控制信号都为零
+}
+
+void right(){
+    DCout1=0;
+    DCout2=0;
+    DCout3=0;
+    DCout4=0;
+    SpeedControl1=0;
+    SpeedControl2=0;
+    //mpu6050,背书暂定
+    //转弯后再次占空比为零，且控制信号都为零
+    }
+
+void getdata_pack()
+{
+    num1=F411_OM.read(buf1,sizeof(buf1));
+    arrow_type_char = int(buf1[0]);
+    arrow_type = int(arrow_type_char);
+}
+
+void send_data(){
+    num2=F411_OM.write(buf2,sizeof(buf2));
+}
+
+int main()
+{
+    //初始化小车
+    init(); 
+    //到达识别点并转弯
+    forward();
+    thread_sleep_for(int(492000/30));   ////（毫秒制）forward 492cm
+    left();
+    thread_sleep_for(1000);
+    //1s后向openmv发出开始识别信号,再1s后接收返回信号
+    send_data();
+    thread_sleep_for(1000);
+    while(arrow_type==0){
+    getdata_pack();//接收返回信号
+    }
+
+
+    //到达撞到地点
+    switch(arrow_type){
+        case 1:
+        right();
+        forward();
+        thread_sleep_for(int(241000/30));//forward 241cm
+        left();
+        forward();
+        thread_sleep_for(int(263000/30));//forward 263cm
+        stop();
+        backward();
+        thread_sleep_for(int(80000/30));//backward 80cm
+        left();
+        forward();
+        thread_sleep_for(int(566000/30));//forward 566cm
+        right();
+        break;
+
+        case 2:
+        left();//left 90
+        forward();
+        thread_sleep_for(int(50000/30));//forward 50cm
+        right();//right 90
+        forward();
+        thread_sleep_for(int(263000/30));//forward 263cm
+        right();//right 90
+        forward();
+        thread_sleep_for(int(50000/30));//forward 50cm
+        left();//left 90
+        forward();
+        thread_sleep_for(int(263000/30));//forward 268cm and knock out the board
+        stop();
+        backward();
+        thread_sleep_for(int(80000/30));//backward 80cm
+        left();//left 90
+        forward();
+        thread_sleep_for(int(328000/30));//forward 328cm
+        right();//right 90
+        break;
+
+        case 3:
+        left();//left 90
+        forward();
+        thread_sleep_for(int(238000/30));//forward 238cm
+        right();//right 90
+        forward();
+        thread_sleep_for(int(263000/30));//forward 263cm and knock out the board
+        stop();
+        backward();
+        thread_sleep_for(int(80000/30));//backward 80cm
+        left();//left 90
+        forward();
+        thread_sleep_for(int(90000/30));//forward 90cm
+        right();//right 90
+        break;
+    }
+
+    //到达第一堵墙
+    while(1)//turning at planter
+    {
+        if(sensor1.getCm()>=407)//407cm is the value between the trolley and the wall
+        {
+            forward();
+        }
+        else{          
+            right();    //right 90
+            break;
+        }
+    }
+    //到达task2
+    while(1)//detection of the bin
+    {
+        if(sensor1.getCm()>20)//xxxxcm is the value between the trolley and the wall
+        {
+            forward();
+        }
+        else{
+            stop();
+            break;
+        }
+    }
+    //task2
+    thread_sleep_for(3000);     //3秒后执行任务
+    for(float offset; offset<0.0007; offset+=0.00005) 
+    {
+        myservo.pulsewidth(0.0005 + offset); 
+        thread_sleep_for(50);
+    }
+    myservo.pulsewidth(0.0005); //关闭爪子
+    //到达task3并调转车头
+    while(1)
+    {
+        if(sensor2.getCm()<100 && sensor3.getCm()<100){     //假设阈值是1m
+        backward();
+        thread_sleep_for(int(100000/30));//backward 100cm
+        stop();
+        break;
+        }
+        backward();
+    }
+    right();
+    right();
+    //通信任务
+    #ifdef INITIAL_RUN
+    clk.set_time(1679226964);
+    #endif
+
+    while(1){
+        hc.set_baud(9600);
+        hc.set_format(
+            /*bits*/ 8,
+            /*parity*/ SerialBase::None,
+            /*stopbit*/ 1
+        );
+        if (control > 0.8) {
+        time_t seconds = clk.time(NULL);
+        struct tm* local_time = localtime(&seconds);
+        second = local_time->tm_sec;
+        minute = local_time->tm_min;
+        hour = local_time->tm_hour;
+        week = local_time->tm_wday + 1;
+        day = local_time->tm_mday;
+        month = local_time->tm_mon + 1;
+        year = local_time->tm_year + 1900;
+        // printf("Time as a basic string = %s\r", ctime(&seconds));
+        hc.printf("Team 41: Furious\n\r");
+        // prints team name and number
+        hc.printf("Li Ruixuan; Wang Ruiqi; Peng Yankai; Guo Yixiao; Luo Jiaqi; Li Yusen; Liu Jingrui; Zeng Yu; Zhang Jinyang; Wang Jiaqi\n\r");
+        // prints team member list
+        hc.printf("Date:%d/%d/%d ", year, month, day);
+        switch(week){
+            case 1: hc.printf("(SUN)\n\r");
+            break;
+            case 2: hc.printf("(MON)\n\r");
+            break;
+            case 3: hc.printf("(TUE)\n\r");
+            break;
+            case 4: hc.printf("(WED)\n\r");
+            break;
+            case 5: hc.printf("(THU)\n\r");
+            break;
+            case 6: hc.printf("(FRI)\n\r");
+            break;
+            case 7: hc.printf("(SAT)\n\r");
+            break;
+            }
+        // print the day according to the obtained number case
+        hc.printf("Current time:%d:%d:%d \n\r", hour, minute, second);
+        }
+        wait_us(1000000);
+    }
+    //驶出task3
+    forward();
+    thread_sleep_for(int(200000/30));//forward 2m
+}

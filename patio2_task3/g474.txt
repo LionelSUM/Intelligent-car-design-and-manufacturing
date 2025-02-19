@@ -1,0 +1,4 @@
+	thread_sleep_for(1000);
+      control = 1;
+      thread_sleep_for(6000);
+      control = 0;

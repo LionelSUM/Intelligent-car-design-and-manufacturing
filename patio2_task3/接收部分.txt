@@ -1,0 +1,18 @@
+#include "mbed.h"
+#include "DS1302.h"
+
+BufferedSerial pc(USBTX, USBRX, 9600);  // tx, rx (pc side)
+BufferedSerial hc(D1, D0, 9600);    // tx, rx (hc-12 side)
+char buf[8];
+
+int main() {
+    // hc.set_baud(9600);  // set the baud rate of HC-12
+
+    while(1) {
+        if(hc.readable()) {    // check if there is readable data for HC-12
+            hc.read(buf, 8); // get the data from HC-12
+            pc.write(buf, 8); // set the data to PC
+            memset(buf,'\0',sizeof(buf));
+        }
+    }
+}

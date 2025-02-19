@@ -1,0 +1,591 @@
+#include "mbed.h"
+#include "HCSR04.h"
+#include "platform/mbed_thread.h"
+#include "JY60.h"
+
+BufferedSerial PC(USBTX,USBRX,9600);// used to debug
+
+BufferedSerial HC(D1,D0,115200); //Serial communication with OpenMV: UART1
+char buf[32]={0}; 
+char r1,r2;
+char r3,r4;
+int num,i;
+float coeff,diff=0,a=0;
+
+AnalogOut control(PA_4);                           //task3 on/off
+DigitalOut DCout1(D2);
+DigitalOut DCout2(D3);
+DigitalOut DCout3(D4);
+DigitalOut DCout4(D5);
+PwmOut left(D6);
+PwmOut right(D7);
+HCSR04 sensor1(D8,D9); //front supersonic sensor, trig, echo
+HCSR04 sensor2(D10,D11); //right supersonic sensor1 up
+HCSR04 sensor3(D12,D13); //right supersonic sensor2 down
+PwmOut myservo(PA_1);                             //the claw
+
+
+void init(){
+    myservo.period_ms(20);
+    myservo.pulsewidth(0.0005);
+    left.write(0.0);
+    right.write(0.0);
+    DCout1 = 0;
+    DCout2 = 0;
+    DCout3 = 0;
+    DCout4 = 0;
+    r1 = 0;
+    r2 = 0;
+    r3 = 0;
+    r4 = 0;
+    }
+
+void forward(){// go forward
+    DCout1=1;
+    DCout2=0;
+    DCout3=0;
+    DCout4=1;
+    left.write(0.47);
+    right.write(0.37);
+    }
+
+void ifgetan(){// judge if the mpu6050 get the angle data
+    while(true){
+        StartdeviceEvent();
+        if(GetData1){
+           break;
+        }
+    }
+    }
+
+void forwardinline(){
+    ifgetan();
+    // Below is the deflection coefficient is set, which increases with the increase of
+    // the distance difference of the offset, but the maximum is not more than 0.1.
+    coeff = 0.001*abs(yaw1-a)+0.02;
+    if(coeff > 0.1){
+        coeff = 0.1;
+    }
+    if(yaw1 > a){// Veer to the left of the line
+    left.write(0.36-2*coeff);
+    right.write(0.30+2*coeff);
+    }
+    else if(yaw1 < a){// Veer to the right of the line
+        left.write(0.36+2*coeff);
+        right.write(0.30-2*coeff);
+    }
+    }
+
+void backward(){// go backward
+
+    DCout1=0;
+    DCout2=1;
+    DCout3=1;
+    DCout4=0;
+    left.write(0.45);
+    right.write(0.38);
+    }
+
+void stop(){
+    DCout1=0;
+    DCout2=0;
+    DCout3=0;
+    DCout4=0;
+    left.write(0.0);
+    right.write(0.0);
+    }
+
+void alleft(){
+    DCout1=1;
+    DCout2=0;
+    DCout3=1;
+    DCout4=0;
+    left.write(0.3);
+    right.write(0.3);
+    }
+
+void alright(){
+    DCout1=0;
+    DCout2=1;
+    DCout3=0;
+    DCout4=1;
+    left.write(0.3);
+    right.write(0.3);
+    }
+
+void turnl(){
+    while(true){
+    alleft();
+    thread_sleep_for(100);
+    if(sensor2.getCm() > sensor3.getCm()){
+        break;
+        }
+    }
+    stop();
+    }
+
+void turnr(){
+    while(true){
+    alright();
+    thread_sleep_for(100);
+    if(sensor2.getCm() < sensor3.getCm()){
+        break;
+        }
+    }
+    stop();
+    }
+
+void getdata_pack(){
+    HC.read(buf,sizeof(buf));
+    r1=buf[0];
+    r2=buf[1];
+    r3=buf[2];
+    r4=buf[3];
+    }
+
+void getparallel(){
+    while(true){
+        if((sensor2.getCm()-sensor3.getCm()) <= 0.3 && (sensor2.getCm()-sensor3.getCm()) >= -0.3){
+            stop();
+            break;
+        }
+        else if(sensor2.getCm() > sensor3.getCm()){// The tail of the car is close to the fence
+            turnr();
+        }
+        else if(sensor2.getCm() < sensor3.getCm()){// The front of the car is close to the fence
+            turnl();
+        }
+    }
+    }
+
+void goinrange(){
+    DCout1=1;
+    DCout2=0;
+    DCout3=0;
+    DCout4=1;
+    // Set the deflection coefficient, which increases with the distance 
+    // difference between the two ultrasounds, but the maximum value is not more than 0.1
+    diff = sensor2.getCm()-sensor3.getCm();
+    coeff = 0.001*abs(diff)+0.02;
+    if(coeff > 0.1){
+        coeff = 0.1;
+    }
+    if(sensor2.getCm() > 25 || diff > 0){
+        left.write(0.35-2*coeff);
+        right.write(0.30+2*coeff);
+    }
+    else if(sensor2.getCm() < 25 || diff < 0){
+        left.write(0.35+2*coeff);
+        right.write(0.30-2*coeff);
+    }
+    }
+
+void goinrangelast(){
+    DCout1=1;
+    DCout2=0;
+    DCout3=0;
+    DCout4=1;
+    diff = sensor2.getCm()-sensor3.getCm();
+    coeff = 0.001*abs(diff)+0.02;
+    if(coeff > 0.1){
+        coeff = 0.1;
+    }
+    if(sensor2.getCm() > 14 || diff > 0){
+        left.write(0.35-2*coeff);
+        right.write(0.30+2*coeff);
+    }
+    else if(sensor2.getCm() < 14 || diff < 0){
+        left.write(0.35+2*coeff);
+        right.write(0.30-2*coeff);
+    }
+    }
+
+int main(){
+    init();
+    // get to the recognition point
+    ifgetan();
+    a=yaw1;
+    forward();
+    while(true){
+        forwardinline();
+        if(sensor1.getCm() < 23){
+            stop();
+            break;
+        }
+    }
+    printf("shou\n");
+
+    // task1 start
+    while(true){
+            printf("kaishi\n");
+            thread_sleep_for(12000);
+            printf("%d\n",r1);
+            getdata_pack();
+            if(r1 != 0){
+                printf("%d\n",r1);
+                break;
+            }
+        }
+    while(true){
+        forward();
+        thread_sleep_for(700);
+        stop();
+        thread_sleep_for(900);
+        alleft();// turn left 90 get to the corner
+        while(true){
+            ifgetan();
+            if(yaw1 > 88){
+                stop();
+                break;
+            }
+        }
+        thread_sleep_for(500);
+        forward();
+        thread_sleep_for(1200);
+        stop();
+
+        if(r1 == 1){// recognize the arrow point to the right, label 1
+            alright();// turn right 90 1
+            while(true){
+                ifgetan();
+                if(yaw1 < 7){
+                    stop();
+                    break;
+                }
+            }
+            thread_sleep_for(500);
+            stop();
+
+            ifgetan();
+            a=yaw1;
+            forward();
+            while(true){
+                forwardinline();
+                if(sensor1.getCm() < 27){
+                    stop();
+                    break;
+                }
+            }
+            thread_sleep_for(1000);
+
+            alleft();// turn left 90 1
+            while(true){
+                ifgetan();
+                if(yaw1 > 90){
+                    stop();
+                    break;
+                }
+            }
+            thread_sleep_for(500);
+            stop();
+
+            ifgetan();
+            a=yaw1;
+            forward();
+            while(true){
+                forwardinline();
+                if(sensor1.getCm() < 30){
+                    forward();
+                    thread_sleep_for(1800);
+                    stop();
+                    break;
+                }
+            }
+
+            alleft();// turn left to face plant
+            while(true){
+                ifgetan();
+                if(yaw1 > 92){
+                    stop();
+                    break;
+                }
+            }
+            break;
+        }
+
+        else if(r1 == 2){// recognize the arrow point to front, label 2
+            ifgetan();
+            a=yaw1;
+            forward();
+            while(true){
+                forwardinline();
+                if(sensor1.getCm() < 23){
+                    forward();
+                    thread_sleep_for(900);
+                    stop();
+                    break;
+                }
+            }
+            thread_sleep_for(1000);
+            alright();// turn right 90 2
+            while(true){
+                ifgetan();
+                if(yaw1 < 7){
+                    stop();
+                    break;
+                }
+            }
+            thread_sleep_for(500);
+            stop();
+
+            ifgetan();
+            a=yaw1;
+            forward();
+            while(true){
+                forwardinline();
+                if(sensor1.getCm() < 50){
+                    stop();
+                    break;
+                }
+            }
+
+            thread_sleep_for(1000);
+            alleft();// turn left 90 2
+            while(true){
+                ifgetan();
+                if(yaw1 > 92){
+                    stop();
+                    break;
+                }
+            }
+            thread_sleep_for(500);
+            stop();
+            break;
+        }
+
+        else if(r1 == 3){// recognize the arrow point to the left, label 3
+            thread_sleep_for(2000);
+            alleft();// turn left 135 3
+            while(true){
+                ifgetan();
+                if(yaw1 > 133){
+                    stop();
+                    break;
+                }
+            }
+            thread_sleep_for(1000);
+            stop();
+
+            ifgetan();
+            a=yaw1;
+            forward();
+            while(true){
+                forwardinline();
+                if(sensor1.getCm() < 27){//23
+                    stop();
+                    break;
+                }
+            }
+
+            thread_sleep_for(2000);
+            alright();// turn right 90 3
+            while(true){
+                ifgetan();
+                if(yaw1 < 92){
+                    stop();
+                    break;
+                }
+            }
+            thread_sleep_for(1000);
+            stop();
+
+            forward();
+            thread_sleep_for(3000);
+            stop();
+            // ifgetan();
+            // a=yaw1;
+            // forward();
+            // while(true){
+            //     forwardinline();
+            //     if(sensor1.getCm() < 25){//23
+            //         forward();
+            //         thread_sleep_for(1070);
+            //         stop();
+            //         break;
+            //     }
+            // }
+
+            thread_sleep_for(1000);
+            alright();// turn right 90 3
+            while(true){
+                ifgetan();
+                if(yaw1 < 3){//7
+                    stop();
+                    break;
+                }
+            }
+            thread_sleep_for(500);
+            stop();
+
+            ifgetan();
+            a=yaw1;
+            forward();
+            while(true){
+                forwardinline();
+                if(sensor1.getCm() < 50){
+                    stop();
+                    break;
+                }
+            }
+
+            thread_sleep_for(1000);
+            alleft();// turn left 90 3
+            while(true){
+                ifgetan();
+                if(yaw1 > 92){
+                    stop();
+                    break;
+                }
+            }
+            thread_sleep_for(500);
+            break;
+        }
+    }
+
+    // task1 finished, waying to task2
+    thread_sleep_for(1000);
+
+    ifgetan();
+    a=yaw1;
+    forward();
+    while(true){// first parallel
+        forwardinline();
+        if(sensor1.getCm() < 45){
+            stop();
+            break;
+        }
+    }
+
+    alright();// first turn, turn right 90 6
+    while(true){
+        ifgetan();
+        if(yaw1 < 1){//7
+            stop();
+            break;
+        }
+    }
+    thread_sleep_for(1000);
+
+    ifgetan();
+    a=yaw1;
+    forward();
+    while(true){
+        forwardinline();
+        if(sensor1.getCm() < 40){
+            stop();
+            break;
+        }
+    }
+
+    // second turn, turn left
+    alleft();// turn left 90 7
+    while(true){
+        ifgetan();
+        if(yaw1 > 89){//85
+            stop();
+            break;
+        }
+    }
+    thread_sleep_for(500);
+
+    forward();
+    thread_sleep_for(4500);// third parallel
+    stop();
+
+    // third turn, turn right to face the stone road
+    alright();// turn right 90 8
+    while(true){
+        ifgetan();
+        if(yaw1 < 9){// 
+            stop();
+            break;
+        }
+    }
+    thread_sleep_for(500);
+
+    ifgetan();
+    a=yaw1;
+    forward();
+    while(true){
+        forwardinline();
+        if(sensor1.getCm() < 25){
+            stop();
+            break;
+        }
+    }
+    thread_sleep_for(500);
+
+    // fourth turn, turn left to face the bin and get parallel to the last fence
+    alleft();// turn left 90 9
+    while(true){
+        ifgetan();
+        if(yaw1 > 91){//85
+            stop();
+            break;
+        }
+    }
+    thread_sleep_for(500);
+
+    ifgetan();
+    a=yaw1;
+    forward();
+    while(true){
+        forwardinline();
+        if(sensor1.getCm() < 23){// waying to the bin
+            stop();// stop in front of the bin
+            break;
+        }
+    }
+
+    // task2 start
+    for(float offset=0; offset<0.0013; offset+=0.00005) 
+    {
+        myservo.pulsewidth(0.0005 + offset); 
+        thread_sleep_for(50);
+    }
+    thread_sleep_for(2000);
+    // task2 finished, waying to task3
+
+    thread_sleep_for(1000);
+    alleft();// turn left 90 10
+    while(true){
+        ifgetan();
+        if(yaw1 > 183){
+            stop();
+            break;
+        }
+    }
+    thread_sleep_for(500);
+
+    ifgetan();
+    a=yaw1;
+    forward();// straight to the communication area
+    while(true){
+        forwardinline();
+        if(sensor1.getCm() < 10){
+            stop();
+            break;
+        }
+    }
+
+    // task3 start
+    thread_sleep_for(2000);
+    control = 1;
+    thread_sleep_for(6000);
+    control = 0;
+    // task3 finished, waying out
+
+    forward();
+    thread_sleep_for(5000);
+    ifgetan();
+    a=yaw1;
+    forward();
+    thread_sleep_for(4000);
+    while(true){// second straight, waying out the communication area
+        forwardinline();
+        if(sensor1.getCm() < 60){
+            stop();
+            break;
+        }
+    }
+}

@@ -1,0 +1,256 @@
+#include "mbed.h"
+#include "HCSR04.h"
+#include "platform/mbed_thread.h"
+
+BufferedSerial HC(D1,D0,115200); //Serial communication with OpenMV: UART1
+char buf[32]={0};
+char r1,r2;
+char r3,r4;
+int num;
+AnalogOut led(PA_4); //A2
+
+///
+AnalogOut control(PA_5);                           //insect on/off
+// DigitalOut DCout1(PA_10);                          //从车尾往车头看，DC1,DC2右轮；DC3,DC4左轮；
+// DigitalOut DCout2(PB_3);
+// DigitalOut DCout3(PB_5);
+// DigitalOut DCout4(PB_4);
+// PwmOut left_speed(PB_10);
+// PwmOut right_speed(PA_8);
+// PwmOut myservo(PA_0);                             //舵机
+// //超声波模块
+// HCSR04 sensor1(D8,D9); //front supersonic sensor, trig, echo
+// HCSR04 sensor2(D10,D11); //left supersonic sensor1
+// HCSR04 sensor3(D12,D13); //left supersonic sensor2
+
+
+
+void init()
+{
+    // myservo.period_ms(20);
+    // //SpeedControl1.period_us(100);
+    // //SpeedControl2.period_us(100);
+    // left_speed.write(0.0);
+    // right_speed.write(0.0);
+    // myservo.pulsewidth(0.0005);
+    // DCout1 = 0;
+    // DCout2 = 0;
+    // DCout3 = 0;
+    // DCout4 = 0;
+    r1 = 0;
+    r2 = 0;
+    r3 = 0;
+    r4 = 0;
+}
+
+// void forward()
+// {
+//     DCout1=1;
+//     DCout2=0;
+//     DCout3=1;
+//     DCout4=0;
+//     left_speed=0.30;
+//     right_speed=0.40;
+// }
+
+// void backward()
+// {
+//     DCout1=0;
+//     DCout2=1;
+//     DCout3=0;
+//     DCout4=1;
+//     left_speed=0.30;
+//     right_speed=0.40;
+// }
+
+// void stop()
+// {
+//     DCout1=0;
+//     DCout2=0;
+//     DCout3=0;
+//     DCout4=0;
+//     left_speed=0;
+//     right_speed=0;
+// }
+
+// void left(){
+//     DCout1=0;
+//     DCout2=0;
+//     DCout3=0;
+//     DCout4=0;
+//     left_speed=0;
+//     right_speed=0;
+//     thread_sleep_for(1000);
+//     //mpu6050,背书暂定
+//     //转弯后再次占空比为零，且控制信号都为零
+// }
+
+// void right(){
+//     DCout1=0;
+//     DCout2=0;
+//     DCout3=0;
+//     DCout4=0;
+//     left_speed=0;
+//     right_speed=0;
+//     thread_sleep_for(1000);
+//     //mpu6050,背书暂定
+//     //转弯后再次占空比为零，且控制信号都为零
+//     }
+///
+
+void getdata_pack()
+{
+    HC.read(buf,sizeof(buf));
+    r1=buf[0];
+    r2=buf[1];
+    r3=buf[2];
+    r4=buf[3];
+}
+
+int main(){
+    while(true){
+        init();
+        //到达识别点并转弯
+        // forward();
+        // thread_sleep_for(int(492000/30));   ////（毫秒制）forward 492cm
+        // left();
+
+        // task1 start
+        led = 1;
+        thread_sleep_for(2000);
+        led = 0;
+        thread_sleep_for(1000);
+        
+        while(true){
+            getdata_pack();
+            if(r1 == 1)
+            {
+                led = 1;
+                thread_sleep_for(1000);
+                led = 0;
+                thread_sleep_for(1000);
+                // right();
+                // forward();
+                // thread_sleep_for(int(241000/30));//forward 241cm
+                // left();
+                // forward();
+                // thread_sleep_for(int(263000/30));//forward 263cm
+                // stop();
+                // backward();
+                // thread_sleep_for(int(80000/30));//backward 80cm
+                // left();
+                // forward();
+                // thread_sleep_for(int(566000/30));//forward 566cm
+                // right();
+                break;
+            }
+
+            else if(r1 == 2)
+            {
+                led = 1;
+                thread_sleep_for(3000);
+                led = 0;
+                thread_sleep_for(3000);
+                // left();//left 90
+                // forward();
+                // thread_sleep_for(int(50000/30));//forward 50cm
+                // right();//right 90
+                // forward();
+                // thread_sleep_for(int(263000/30));//forward 263cm
+                // right();//right 90
+                // forward();
+                // thread_sleep_for(int(50000/30));//forward 50cm
+                // left();//left 90
+                // forward();
+                // thread_sleep_for(int(263000/30));//forward 268cm and knock out the board
+                // stop();
+                // backward();
+                // thread_sleep_for(int(80000/30));//backward 80cm
+                // left();//left 90
+                // forward();
+                // thread_sleep_for(int(328000/30));//forward 328cm
+                // right();//right 90
+                break;
+            }
+
+            else if(r1 == 3)
+            {
+                led = 1;
+                thread_sleep_for(5000);
+                led = 0;
+                thread_sleep_for(5000);
+                // left();//left 90
+                // forward();
+                // thread_sleep_for(int(238000/30));//forward 238cm
+                // right();//right 90
+                // forward();
+                // thread_sleep_for(int(263000/30));//forward 263cm and knock out the board
+                // stop();
+                // backward();
+                // thread_sleep_for(int(80000/30));//backward 80cm
+                // left();//left 90
+                // forward();
+                // thread_sleep_for(int(90000/30));//forward 90cm
+                // right();//right 90
+                break;
+            }
+        }
+
+    //     // task1 finished, waying to task2
+    //     while(1){//turning at planter
+    //     if(sensor1.getCm()>=407)//407cm is the value between the trolley and the wall
+    //     {
+    //         forward();
+    //     }
+    //     else{          
+    //         right();    //right 90
+    //         break;
+    //     }
+    //     }
+    //     // task2 start
+    //     while(1)//detection of the bin
+    //     {
+    //         if(sensor1.getCm()>20)//xxxxcm is the value between the trolley and the wall
+    //         {
+    //             forward();
+    //         }
+    //         else{
+    //             stop();
+    //             break;
+    //         }
+    //     }
+        
+    //     thread_sleep_for(3000);     //3秒后执行任务
+    //     for(float offset; offset<0.0007; offset+=0.00005) 
+    //     {
+    //         myservo.pulsewidth(0.0005 + offset); 
+    //         thread_sleep_for(50);
+    //     }
+    //     myservo.pulsewidth(0.0005); //关闭爪子
+
+    //     // task2 finished, waying to task3
+
+    //     while(1)
+    //     {
+    //         if(sensor2.getCm()<100 && sensor3.getCm()<100){     //假设阈值是1m
+    //         backward();
+    //         thread_sleep_for(int(100000/30));//backward 100cm
+    //         stop();
+    //         break;
+    //         }
+    //         backward();
+    //     }
+    //     right();
+    //     right();
+        // task3 start
+        thread_sleep_for(1000);
+        control = 1;
+        thread_sleep_for(100000);
+        control = 0;
+        // task3 finished, waying out
+        // forward();
+        // thread_sleep_for(int(200000/30));//forward 2m
+        // stop();
+    }
+
+}
